@@ -20,5 +20,8 @@
 | 支持裁剪               |     |
 
 ### 参考资料
-[Thonky's QR Code Tutorial](https://www.thonky.com/qr-code-tutorial/)
+1. [Thonky's QR Code Tutorial](https://www.thonky.com/qr-code-tutorial/)
+
+### 测试使用到的开源库
+1. [minifb](https://github.com/emoon/minifb)
 
