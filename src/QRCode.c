@@ -1,6 +1,36 @@
 #include "QRCode.h"
 #include <stdlib.h>
 
+static const uint8_t AlignmentPatternLocations[]={
+    26,46,66,   // version14
+    26,48,70,
+    26,50,74,
+    30,54,78,
+    30,56,82,
+    30,58,86,
+    34,62,90,   
+    28,50,72,94,    // version21
+    26,50,74,98,
+    30,54,78,102,
+    28,54,80,106,
+    32,58,84,110,
+    30,58,86,114,
+    34,62,90,118,
+    26,50,74,98,122,    // version28
+    30,54,78,102,126,
+    26,52,78,104,130,
+    30,56,82,108,134,
+    34,60,86,112,138,
+    30,58,86,114,142,
+    34,62,90,118,146,
+    30,54,78,102,126,150, // version35
+    24,50,76,102,128,154,
+    28,54,80,106,132,158,
+    32,58,84,110,136,162,
+    26,54,82,110,138,166,
+    30,58,86,114,142,170
+};
+
 typedef struct
 {
     uint8_t *data;
@@ -11,7 +41,7 @@ typedef struct
 // TODO
 static QRCode_Error QRCode_analyse(QRCode* qr,const uint8_t *raw,uint16_t len)
 {
-    qr->version = 1;
+    qr->version = 40;
     qr->ecc = QRCODE_ECC_M;
     qr->mode = QRCODE_MODE_ALPHANUMERIC;
     return QRCODE_OK;
@@ -23,19 +53,179 @@ static QRCode_Error QRCode_encode(QRCode* qr,const uint8_t *raw,uint16_t len,QRC
 
     return QRCODE_OK;
 };
+/////////////////// place modules //////////////////
+static void QRCode_setModule(uint8_t* data,uint8_t width,uint8_t x,uint8_t y)
+{
+    data[(y*width+x)/8] |= 1<<((y*width+x)%8);
+    return;
+};
+static void QRCode_clrModule(uint8_t* data,uint8_t width,uint8_t x,uint8_t y)
+{
+    data[(y*width+x)/8] &= ~(1<<((y*width+x)%8));
+    return;
+};
+static void QRCode_setRectangle(uint8_t* data,uint8_t width,uint8_t x1,uint8_t y1,uint8_t x2,uint8_t y2)
+{
+    for (uint8_t y = y1; y < y2; y++)
+    {
+        for (uint8_t x = x1; x < x2; x++)
+        {
+            QRCode_setModule(data,width,x,y);
+        }
+    }  
+    return;  
+};
+
+static void QRCode_placeBoundaryAligmentPattern(uint8_t* data,uint8_t width,uint8_t x,uint8_t y)
+{
+    QRCode_setRectangle(data,width,x-2,y-2,x+3,y+3);
+}
+static void QRCode_clearBoundaryAligmentPattern(uint8_t* data,uint8_t width,uint8_t x,uint8_t y)
+{   
+    QRCode_clrModule(data,width,x-1,y-1);
+    QRCode_clrModule(data,width,x,y-1);
+    QRCode_clrModule(data,width,x+1,y-1);
+    QRCode_clrModule(data,width,x-1,y+1);
+    QRCode_clrModule(data,width,x,y+1);
+    QRCode_clrModule(data,width,x+1,y+1);
+    QRCode_clrModule(data,width,x-1,y);
+    QRCode_clrModule(data,width,x+1,y);
+}
+static void QRCode_placeAligmentPatterns(QRCode* qr,uint8_t isBoundary)
+{
+    uint8_t width = (qr->version*4+17);
+    uint8_t *alignPatPos;
+    int8_t alignPatNum = 0;
+    void (*maker)(uint8_t*,uint8_t,uint8_t,uint8_t);
+    maker = QRCode_clearBoundaryAligmentPattern;
+    if (isBoundary)
+    {
+        maker = QRCode_placeBoundaryAligmentPattern;
+    }
+    
+    if (qr->version != 1)
+    {
+        alignPatNum = qr->version/7+1;
+    }
+    if (qr->version <7)
+    {
+        alignPatPos = (uint8_t*)malloc(1);
+        alignPatPos[0]=width-7;
+    }else if (qr->version <14)
+    {
+        alignPatPos = (uint8_t*)malloc(2);
+        alignPatPos[1]=width-7;
+        alignPatPos[0]=(alignPatPos[1]+6)/2;
+    }else
+    {
+        alignPatPos = (uint8_t*)AlignmentPatternLocations+(qr->version<21?0:(qr->version<28?21:(qr->version<35?49:84)))+alignPatNum*(qr->version%7);
+    }
+    
+    for (uint8_t i = 0; i < alignPatNum; i++)
+    {
+        for (uint8_t j = 0; j < alignPatNum; j++)
+        {
+            maker(qr->data,width,alignPatPos[i],alignPatPos[j]);
+        }
+    }
+    for (int8_t i = 0; i < alignPatNum-1; i++)
+    {
+        maker(qr->data,width,6,alignPatPos[i]);
+        maker(qr->data,width,alignPatPos[i],6);
+    }
+    
+}
+static void QRCode_placeBoundary(QRCode* qr)
+{
+    uint8_t width = (qr->version*4+17);
+    // finder pattern
+    QRCode_setRectangle(qr->data,width,0,0,9,9);
+    QRCode_setRectangle(qr->data,width,width-8,0,width,9);
+    QRCode_setRectangle(qr->data,width,0,width-8,9,width);
+    // dark module
+    QRCode_setModule(qr->data,width,8,width-8);
+    // alignment pattern
+    QRCode_placeAligmentPatterns(qr,1);
+    // timing pattern
+    for (uint8_t i = 9; i < width-8; i++)
+    {
+        QRCode_setModule(qr->data,width,i,6);
+        QRCode_setModule(qr->data,width,6,i);
+    }
+    // version info area
+    if (qr->version>6)
+    {
+        QRCode_setRectangle(qr->data,width,width-11,0,width-8,6);
+        QRCode_setRectangle(qr->data,width,0,width-11,6,width-8);
+    }
+    return;
+};
+
+static void QRCode_placeData(QRCode* qr,QRCode_Bitset* dataSet)
+{
+    return;
+};
+
+static void QRCode_clearPattern(QRCode* qr)
+{
+    uint8_t width = qr->version*4+17;
+    for (uint8_t i = 0; i < 5; i++)
+    {
+        QRCode_clrModule(qr->data,width,1+i,1);
+        QRCode_clrModule(qr->data,width,1+i,5);
+        QRCode_clrModule(qr->data,width,width-6+i,1);
+        QRCode_clrModule(qr->data,width,width-6+i,5);
+        QRCode_clrModule(qr->data,width,1+i,width-6);
+        QRCode_clrModule(qr->data,width,1+i,width-2);
+    }
+    for (uint8_t i = 0; i < 3; i++)
+    {
+        QRCode_clrModule(qr->data,width,1,2+i);
+        QRCode_clrModule(qr->data,width,5,2+i);
+        QRCode_clrModule(qr->data,width,width-6,2+i);
+        QRCode_clrModule(qr->data,width,width-2,2+i);
+        QRCode_clrModule(qr->data,width,1,width-5+i);
+        QRCode_clrModule(qr->data,width,5,width-5+i);
+    }
+    for (uint8_t i = 0; i < 8; i++)
+    {
+        QRCode_clrModule(qr->data,width,i,7);
+        QRCode_clrModule(qr->data,width,7,i);
+        QRCode_clrModule(qr->data,width,width-8,i);
+        QRCode_clrModule(qr->data,width,width-8+i,7);
+        QRCode_clrModule(qr->data,width,i,width-8);
+        QRCode_clrModule(qr->data,width,7,width-8+i);
+    }
+    for (uint8_t i = 9; i < width-9; i+=2)
+    {
+        QRCode_clrModule(qr->data,width,i,6);
+        QRCode_clrModule(qr->data,width,6,i);
+    }
+    QRCode_placeAligmentPatterns(qr,0);
+    return;
+};
+
+static void QRCode_placeInfoAndPattern(QRCode* qr)
+{
+    QRCode_clearPattern(qr);
+    return;
+};
 
 // TODO
-static QRCode_Error QRCode_place(QRCode* qr,QRCode_Bitset* dataSet)
+static QRCode_Error QRCode_placeModules(QRCode* qr,QRCode_Bitset* dataSet)
 {
     uint16_t bufferSize = ((qr->version*4+17)*(qr->version*4+17)+7)/8;
     qr->data = calloc(bufferSize,sizeof(uint8_t));
-    for (size_t i = 0; i < bufferSize; i++)
-    {
-        qr->data[i] = 0xAA;
-    }
-    
+    // for (size_t i = 0; i < bufferSize; i++)
+    // {
+    //     qr->data[i] = 0xAA;
+    // }
+    QRCode_placeBoundary(qr);
+    QRCode_placeData(qr,dataSet);
+    QRCode_placeInfoAndPattern(qr);
     return QRCODE_OK;
 };
+/////////////////// place modules end //////////////////
 
 QRCode *QRCode_generate(const uint8_t *raw,
                       uint16_t len,
@@ -59,7 +249,7 @@ QRCode *QRCode_generate(const uint8_t *raw,
     {
         return NULL;
     }
-    if (QRCode_place(qr,dataSet) != QRCODE_OK)
+    if (QRCode_placeModules(qr,dataSet) != QRCODE_OK)
     {
         return NULL;
     }else{
