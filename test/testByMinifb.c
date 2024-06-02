@@ -52,11 +52,11 @@ int main()
         g_buffer[g_width * j] = 0x00FFFFFF;
         g_buffer[g_width * j + (g_width - 1)] = 0x00FFFFFF;
     }
-    for (size_t j = (g_width-qrWidth)/2; j < (g_width-qrWidth)/2+qrWidth; j++)
-    {
-        for (size_t k = (g_width-qrWidth)/2; k < (g_width-qrWidth)/2+qrWidth; k++)
-            g_buffer[j*g_width+k] = (j+k)%2?0x00888888:0;
-    }
+    // for (size_t j = (g_width-qrWidth)/2; j < (g_width-qrWidth)/2+qrWidth; j++)
+    // {
+    //     for (size_t k = (g_width-qrWidth)/2; k < (g_width-qrWidth)/2+qrWidth; k++)
+    //         g_buffer[j*g_width+k] = (j+k)%2?0x00888888:0;
+    // }
     bitmap2UInt32(qr->data,
     qrWidth,
     qrWidth*qrWidth,
