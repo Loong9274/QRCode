@@ -348,10 +348,3 @@ QRCode *QRCode_generate(const uint8_t *raw,
         return qr;
     }
 };
-
-#include <stdio.h>
-void testQRCode(void)
-{
-    printf("Hello QRCode\n");
-    return;
-}
