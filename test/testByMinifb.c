@@ -10,18 +10,6 @@ static uint32_t *g_buffer = 0x0;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void bitmap2UInt32(uint8_t* bitmap,uint8_t width,uint16_t len,uint32_t* intmap,uint16_t stride,uint32_t color)
-{
-    uint16_t count = 0;
-    while (count<len)
-    {
-        if (bitmap[count/8]&(1<<(count%8)))
-        {
-            intmap[count/width*stride+(count%width)] = color;
-        }
-        count++;
-    }
-};
 
 int main()
 {
@@ -57,7 +45,7 @@ int main()
     //     for (size_t k = (g_width-qrWidth)/2; k < (g_width-qrWidth)/2+qrWidth; k++)
     //         g_buffer[j*g_width+k] = (j+k)%2?0x00888888:0;
     // }
-    bitmap2UInt32(qr->data,
+    QRCode_BitmapToUInt32Map(qr->data,
     qrWidth,
     qrWidth*qrWidth,
     g_buffer+(g_width-qrWidth)/2*(g_width+1), // in the center

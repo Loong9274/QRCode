@@ -7,6 +7,12 @@ extern "C"
 #endif //__cplusplus
 #include <stdint.h>
 
+// #define QRCODE_NO_MALLOC
+// #define QRCODE_MAX_VERSION   40
+// #define QRCODE_STORAGE_FIRST
+// #define QRCODE_TIME_FIRST
+
+
     typedef enum
     {
         QRCODE_OK,
@@ -63,7 +69,17 @@ extern "C"
                             uint8_t version,
                             QRCode_Mask mask);
 
-    void testQRCode(void);
+    QRCode *QRCode_generateAuto(const uint8_t *raw, uint16_t len);
+
+    QRCode *QRCode_generateText(const char *raw,
+                                QRCode_Mode mode,
+                                QRCode_Ecc ecc,
+                                uint8_t version,
+                                QRCode_Mask mask);
+
+    QRCode *QRCode_generateTextAuto(const char *raw);
+
+    void QRCode_BitmapToUInt32Map(uint8_t *bitmap, uint8_t width, uint16_t len, uint32_t *intmap, uint32_t stride, uint32_t color);
 
 #ifdef __cplusplus
 }

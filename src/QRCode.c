@@ -182,10 +182,6 @@ static void QRCode_placeDataModules(QRCode *qr, uint8_t *data)
     int16_t x = width - 1;
     int16_t y = width - 1;
     uint32_t count = 0;
-    for (size_t i = 0; i < 26; i++)
-    {
-        printf("%d, ",data[i]);
-    }printf("\n");
     
     while (x > 1)
     {
@@ -214,7 +210,6 @@ static void QRCode_placeDataModules(QRCode *qr, uint8_t *data)
         y--;
         x -= 2;
     }
-    printf("count: %d\n",count);
     return;
 };
 
@@ -349,9 +344,16 @@ QRCode *QRCode_generate(const uint8_t *raw,
     }
 };
 
-#include <stdio.h>
-void testQRCode(void)
+
+void QRCode_BitmapToUInt32Map(uint8_t *bitmap, uint8_t width, uint16_t len, uint32_t *intmap, uint32_t stride, uint32_t color)
 {
-    printf("Hello QRCode\n");
-    return;
-}
+    uint16_t count = 0;
+    while (count<len)
+    {
+        if (bitmap[count/8]&(1<<(count%8)))
+        {
+            intmap[count/width*stride+(count%width)] = color;
+        }
+        count++;
+    }
+};

@@ -1,6 +1,6 @@
 ## 二维码生成器
 图一乐的用于生成二维码的C库
-当前状态：不可用
+当前状态：仅支持生成"HELLO WORLD"
 
 ### 目标
 - 正确 完全符合二维码标准
@@ -18,6 +18,20 @@
 | 能按Tutorial生成可扫的二维码 |     |
 | 支持版本1~40           |     |
 | 支持裁剪               |     |
+
+### 体验
+```shell
+# windows
+cd build
+cmake -G"MinGW Makefiles" ..
+make
+.\test\testByMinifb.exe
+
+# linux
+cmake -S . -B build
+cmake --build build
+build/test/testByMinifb
+```
 
 ### 参考资料
 1. [Thonky's QR Code Tutorial](https://www.thonky.com/qr-code-tutorial/)
