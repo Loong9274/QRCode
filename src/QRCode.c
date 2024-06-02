@@ -348,3 +348,17 @@ QRCode *QRCode_generate(const uint8_t *raw,
         return qr;
     }
 };
+
+
+void QRCode_BitmapToUInt32Map(uint8_t *bitmap, uint8_t width, uint16_t len, uint32_t *intmap, uint32_t stride, uint32_t color)
+{
+    uint16_t count = 0;
+    while (count<len)
+    {
+        if (bitmap[count/8]&(1<<(count%8)))
+        {
+            intmap[count/width*stride+(count%width)] = color;
+        }
+        count++;
+    }
+};
