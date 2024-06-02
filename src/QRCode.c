@@ -182,10 +182,6 @@ static void QRCode_placeDataModules(QRCode *qr, uint8_t *data)
     int16_t x = width - 1;
     int16_t y = width - 1;
     uint32_t count = 0;
-    for (size_t i = 0; i < 26; i++)
-    {
-        printf("%d, ",data[i]);
-    }printf("\n");
     
     while (x > 1)
     {
@@ -214,7 +210,6 @@ static void QRCode_placeDataModules(QRCode *qr, uint8_t *data)
         y--;
         x -= 2;
     }
-    printf("count: %d\n",count);
     return;
 };
 
