@@ -28,9 +28,13 @@ make
 .\test\testByMinifb.exe
 
 # linux
-cmake -S . -B build
-cmake --build build
-build/test/testByMinifb
+mkdir build
+cmake ..
+make
+./test/testByMinifb
+    #   you may meet this error (i did)
+    #   error xkbcommon/xkbcommon.h: No such file or directory
+    #   sudo apt-get install libxkbcommon-x11-dev
 ```
 
 ### 参考资料
