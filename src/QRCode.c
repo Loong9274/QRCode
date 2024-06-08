@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#define PRINT_ARRAY(array) do{printf(#array": [");for(size_t i=0;i<sizeof(array);i++){printf("%d, ",array[i]);}printf("]\n");}while (0)
 static const uint8_t AlignmentPatternLocations[] = {
     26, 46, 66, // version14
     26, 48, 70,
@@ -79,7 +80,143 @@ static QRCode_Error QRCode_analyse(QRCode *qr, const uint8_t *raw, uint16_t len)
     return QRCODE_OK;
 };
 
+static void QRCode_appendBitset(uint8_t* bitset,uint16_t bitIndex,uint32_t data,uint8_t bitNum)
+{
+    size_t remUInt8 = 8 -(bitIndex % 8);
+    size_t byteIndex = bitIndex/8;
 
+    //对齐边界
+    if (remUInt8)
+    {
+        if (bitNum>remUInt8)
+        {
+            bitset[byteIndex] |=  ((data&(~(0x000000FF<<bitNum))) >> (bitNum-remUInt8));
+            bitNum -= remUInt8;
+            byteIndex++;
+        }
+        else
+        {
+            bitset[byteIndex] |=  ((data&(~(0x000000FF<<bitNum))) << (remUInt8-bitNum));
+            bitNum = 0;
+        }
+    }
+    while (bitNum >= 8)
+    {
+        bitNum -= 8;
+        bitset[byteIndex++] = data >> bitNum;
+    }
+    if (bitNum)
+    {
+        bitset[byteIndex] = data << (8-bitNum);
+    }
+    return;
+};
+
+static void print_byte(uint8_t data)
+{
+    for (uint8_t i = 0x80; i; i >>= 1)
+    {
+        printf("%d", (i & data) != 0);
+    }
+    printf(" ");
+};
+static void print_binary(uint8_t *data, uint32_t len)
+{
+#define BYTE_IN_LINE 8
+    size_t i = 0;
+    for (; i+BYTE_IN_LINE <= len; i += BYTE_IN_LINE)
+    {
+        printf("%4d  ", i);
+        for (size_t j = 0; j < BYTE_IN_LINE; j++)
+        {
+            print_byte(data[i + j]);
+        }
+        printf("\n");
+    }
+    if ((len%BYTE_IN_LINE) != 0)
+    {
+        printf("%4d  ", i);
+        for (; i<len;i++)
+        {
+            print_byte(data[i]);
+        }
+        printf("\n");
+    }
+};
+
+uint8_t QRCode_ALPHANUMERIC_toUInt8(uint8_t data)
+{
+    if ((data >= 'A') && (data <= 'Z'))
+        return data - 'A' + 10;
+    else if ((data >= '0') && (data <= '9'))
+        return data - '0';
+    else
+    {
+        switch (data)
+        {
+        case ' ':
+            return 36;
+        case '$':
+            return 37;
+        case '%':
+            return 38;
+        case '*':
+            return 39;
+        case '+':
+            return 40;
+        case '-':
+            return 41;
+        case '.':
+            return 42;
+        case '/':
+            return 43;
+        case ':':
+            return 44;
+        }
+    }
+    return 0;
+}
+static void QRCode_genDataBytes_ALPHANUMERIC(const uint8_t *raw, uint16_t rawLen,uint8_t *dataBytes,uint8_t dataLen)
+{
+    uint16_t bitIndex = 0;
+    QRCode_appendBitset(dataBytes,bitIndex,0x02,4);
+    bitIndex+=4;
+    QRCode_appendBitset(dataBytes,bitIndex,rawLen,9);
+    bitIndex+=9;
+    for (size_t i = 0; i < rawLen-2; i+=2)
+    {
+        uint16_t temp = QRCode_ALPHANUMERIC_toUInt8(raw[i])*45+QRCode_ALPHANUMERIC_toUInt8(raw[i+1]);
+        QRCode_appendBitset(dataBytes,bitIndex,temp,11);
+        bitIndex+=11;
+    }
+    if ((rawLen%2)==1)
+    {
+        uint16_t temp = QRCode_ALPHANUMERIC_toUInt8(raw[rawLen-1]);
+        QRCode_appendBitset(dataBytes,bitIndex,temp,6);
+        bitIndex+=5;
+    }
+    print_binary(dataBytes,16);
+    
+    bitIndex += (dataLen*8-bitIndex)>4?4:(dataLen*8-bitIndex);
+    bitIndex = (bitIndex+7)/8*8;
+    while ((bitIndex+16)<=(dataLen*8))
+    {
+        QRCode_appendBitset(dataBytes,bitIndex,0xEC11,16);
+        bitIndex+=16;
+    }
+    if (bitIndex<dataLen*8)
+    {
+        QRCode_appendBitset(dataBytes,bitIndex,0xEC,8);
+        bitIndex+=8;
+    }
+    
+
+};
+
+static void QRCode_genDataBytes(QRCode *qr, const uint8_t *raw, uint16_t len,uint8_t *dataBytes)
+{
+    QRCode_genDataBytes_ALPHANUMERIC(raw,len,dataBytes,16);
+};
 static void QRCode_genEccCodePolyDiv(uint8_t* dataBytes,uint8_t* genBytes,uint8_t eccLen,uint8_t head)
 {
     for (size_t i = 0; i < eccLen; i++)
@@ -134,23 +271,17 @@ static void QRCode_genEccCode(uint8_t* dataBytes,uint8_t dataLen,uint8_t eccLen)
 // TODO
 static QRCode_Error QRCode_encode(QRCode *qr, const uint8_t *raw, uint16_t len, QRCode_Bitset *dataSet)
 {
+    printf("raw: %s\n",raw);
 
-    uint8_t dataBytes[26]={32, 91, 11, 120, 209, 114, 
-                220, 77, 67, 64, 236, 17, 236, 17, 236, 17};
-    uint8_t temp[26]={0};
-    QRCode_genDataBytes(qr,raw,temp);
+    uint8_t *dataBytes=calloc(26,1);
+    QRCode_genDataBytes(qr,raw,len,dataBytes);
+
     dataSet->data = malloc(26);
     memcpy(dataSet->data,dataBytes,16);
 
     QRCode_genEccCode(dataBytes,16,10);
 
     memcpy(dataSet->data+16,dataBytes+16,10);
-
-    // const uint8_t dataHELLO_WORLD[] ={
-    //     32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17,
-    //     196,  35,  39,  119,  235,  215,  231,  226,  93,  23
-    // };
-    
     
     return QRCODE_OK;
 };
