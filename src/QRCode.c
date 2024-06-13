@@ -259,6 +259,8 @@ static void QRCode_genEccCode(uint8_t* dataBytes,uint8_t dataLen,uint8_t eccLen)
     // }printf("\n");
     for (size_t i = 0; i < dataLen; i++)
     {
+        if (dataBytes[i] == 0)
+            continue;
         QRCode_genEccCodePolyDiv(dataBytes+i+1,genCode,10,dataBytes[i]);
     }
     // printf("eccBytes: ");
