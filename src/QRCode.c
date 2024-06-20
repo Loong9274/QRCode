@@ -5,7 +5,25 @@
 #define PRINT_ARRAY(array) do{printf(#array": [");for(size_t i=0;i<sizeof(array);i++){printf("%d, ",array[i]);}printf("]\n");}while (0)
 
 static const uint8_t CountIndicatorLength[4][3]={
-    {10,12,14},{9,11,13},{8,16,16},{8,10,12}
+    //{1-9, 10-26, 27-40}
+    {10,12,14}, //Numeric
+    {9,11,13},  //AlphaNumeric
+    {8,16,16},  //Byte
+    {8,10,12}
+};
+
+static const uint16_t Version10CapacitiesInModeEcc[][4]={
+    {652,513,364,288}, //Numeric
+    {395,311,221,174},  //AlphaNumeric
+    {271,213,151,119},  //Byte
+    {167,131, 93, 74}
+};
+
+static const uint16_t Version27CapacitiesInModeEcc[][4]={
+    {3517,2701,1933,1501}, //Numeric
+    {2132,1637,1172,910},  //AlphaNumeric
+    {1465,1125,805,625},  //Byte
+    {902,692,496,385}
 };
 
 static const uint16_t RawDataLength[40]={
@@ -20,7 +38,7 @@ static const int8_t EccByteNum[4][40] = {
 	{17, 28, 22, 16, 22, 28, 26, 26, 24, 28, 24, 28, 22, 24, 24, 30, 28, 28, 26, 28, 30, 24, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30},  // High
 };
 
-static const int8_t NUM_ERROR_CORRECTION_BLOCKS[4][40] = {
+static const int8_t BlockNum[4][40] = {
 	//1, 2, 3, 4, 5, 6, 7, 8, 9,10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40    Error correction level
 	{ 1, 1, 1, 1, 1, 2, 2, 2, 2, 4,  4,  4,  4,  4,  6,  6,  6,  6,  7,  8,  8,  9,  9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25},  // Low
 	{ 1, 1, 1, 2, 2, 4, 4, 4, 5, 5,  5,  8,  9,  9, 10, 10, 11, 13, 14, 16, 17, 17, 18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40, 43, 45, 47, 49},  // Medium
@@ -90,12 +108,179 @@ static const uint8_t toUInt8[256]={
 };
 
 
+static uint8_t QRCode_ALPHANUMERIC_toUInt8(const uint8_t data)
+{
+    if ((data >= 'A') && (data <= 'Z'))
+        return data - 'A' + 10;
+    else if ((data >= '0') && (data <= '9'))
+        return data - '0';
+    else
+    {
+        switch (data)
+        {
+        case ' ':
+            return 36;
+        case '$':
+            return 37;
+        case '%':
+            return 38;
+        case '*':
+            return 39;
+        case '+':
+            return 40;
+        case '-':
+            return 41;
+        case '.':
+            return 42;
+        case '/':
+            return 43;
+        case ':':
+            return 44;
+        }
+    }
+    return 0;
+}
+
+static uint16_t QRCode_getCapacity(QRCode_Mode mode,QRCode_Ecc ecc,uint8_t version)
+{
+    uint8_t versionPhase = 2;
+    ecc-=1;
+    version-=1;
+    if (version<9)
+        versionPhase = 0;
+    else if(version<26)
+        versionPhase = 1;
+    uint16_t dataModules = RawDataLength[version]/8*8-EccByteNum[ecc][version]*BlockNum[ecc][version]*8-4;
+    switch (mode)
+    {
+    case QRCODE_MODE_NUMERIC:
+        return (dataModules-CountIndicatorLength[0][versionPhase])/10*3+((dataModules-CountIndicatorLength[0][versionPhase])%10)/4;
+    case QRCODE_MODE_ALPHANUMERIC:
+        return (dataModules-CountIndicatorLength[1][versionPhase])/11*2+((dataModules-CountIndicatorLength[1][versionPhase])%11)/6;
+    case QRCODE_MODE_BYTE:
+        return (dataModules-CountIndicatorLength[2][versionPhase])/8;
+    default:
+        return 0;
+    }
+    
+}
+
+static void QRCode_printCapacities()
+{
+    for (size_t Version = 0; Version < 9; Version++)
+    {
+        for (size_t ecc = 0; ecc < 4; ecc++)
+        {
+            uint16_t dataModules = RawDataLength[Version]/8*8-EccByteNum[ecc][Version]*BlockNum[ecc][Version]*8-4;
+            printf("version:%2d ecc:%1d %4d %4d %4d\n",Version+1,ecc,
+            (dataModules-CountIndicatorLength[0][0])/10*3+((dataModules-CountIndicatorLength[0][0])%10)/4,
+            (dataModules-CountIndicatorLength[1][0])/11*2+((dataModules-CountIndicatorLength[1][0])%11)/6,
+            (dataModules-CountIndicatorLength[2][0])/8);
+            printf("version:%2d ecc:%1d %4d %4d %4d\n",Version+1,ecc,
+            QRCode_getCapacity(QRCODE_MODE_NUMERIC,ecc+1,Version+1),
+            QRCode_getCapacity(QRCODE_MODE_ALPHANUMERIC,ecc+1,Version+1),
+            QRCode_getCapacity(QRCODE_MODE_BYTE,ecc+1,Version+1));
+        }
+    }
+    for (size_t Version = 9; Version < 26; Version++)
+    {
+        for (size_t ecc = 0; ecc < 4; ecc++)
+        {
+            uint16_t dataModules = RawDataLength[Version]/8*8-EccByteNum[ecc][Version]*BlockNum[ecc][Version]*8-4;
+            printf("version:%2d ecc:%1d %4d %4d %4d\n",Version+1,ecc,
+            (dataModules-CountIndicatorLength[0][1])/10*3+((dataModules-CountIndicatorLength[0][1])%10)/4,
+            (dataModules-CountIndicatorLength[1][1])/11*2+((dataModules-CountIndicatorLength[1][1])%11)/6,
+            (dataModules-CountIndicatorLength[2][1])/8);
+            printf("version:%2d ecc:%1d %4d %4d %4d\n",Version+1,ecc,
+            QRCode_getCapacity(QRCODE_MODE_NUMERIC,ecc+1,Version+1),
+            QRCode_getCapacity(QRCODE_MODE_ALPHANUMERIC,ecc+1,Version+1),
+            QRCode_getCapacity(QRCODE_MODE_BYTE,ecc+1,Version+1));
+        }
+    }
+    for (size_t Version = 26; Version < 40; Version++)
+    {
+        for (size_t ecc = 0; ecc < 4; ecc++)
+        {
+            uint16_t dataModules = RawDataLength[Version]/8*8-EccByteNum[ecc][Version]*BlockNum[ecc][Version]*8-4;
+            printf("version:%2d ecc:%1d %4d %4d %4d\n",Version+1,ecc,
+            (dataModules-CountIndicatorLength[0][2])/10*3+((dataModules-CountIndicatorLength[0][2])%10)/4,
+            (dataModules-CountIndicatorLength[1][2])/11*2+((dataModules-CountIndicatorLength[1][2])%11)/6,
+            (dataModules-CountIndicatorLength[2][2])/8);
+            printf("version:%2d ecc:%1d %4d %4d %4d\n",Version+1,ecc,
+            QRCode_getCapacity(QRCODE_MODE_NUMERIC,ecc+1,Version+1),
+            QRCode_getCapacity(QRCODE_MODE_ALPHANUMERIC,ecc+1,Version+1),
+            QRCode_getCapacity(QRCODE_MODE_BYTE,ecc+1,Version+1));
+        }
+    }
+    
+};
+
+// TODO test
+static uint8_t QRCode_getMinVersion(QRCode_Mode mode,QRCode_Ecc ecc,uint16_t len)
+{
+    uint8_t version = 27;
+    if(len<Version10CapacitiesInModeEcc[mode-1][ecc-1])
+        version = 1;
+    else if(len<Version27CapacitiesInModeEcc[mode-1][ecc-1])
+        version = 11;
+    while (len>QRCode_getCapacity(mode,ecc,version))
+    {
+        version++;
+        if (version > QRCODE_MAX_VERSION)
+        {
+            return 0;
+        }
+    }
+    return version;
+} 
+
 // TODO
 static QRCode_Error QRCode_analyse(QRCode *qr, const uint8_t *raw, uint16_t len)
 {
-    qr->version = 1;
-    qr->ecc = QRCODE_ECC_M;
-    qr->mode = QRCODE_MODE_ALPHANUMERIC;
+    uint16_t count=0;
+    uint8_t type = QRCODE_MODE_NUMERIC;
+    while (count<len)
+    {
+        if (raw[count]<'0' || raw[count]>'9')  
+        {
+            type = QRCODE_MODE_ALPHANUMERIC;
+            break;
+        }
+        count++;
+    }
+    while (count<len)
+    {
+        if (QRCode_ALPHANUMERIC_toUInt8(raw[count]) == 0 && raw[count]!='0')  
+        {
+            type = QRCODE_MODE_BYTE;
+            break;
+        }
+        count++;
+    }
+    if (type>qr->mode)
+    {
+        qr->mode = type;
+    }
+    if (qr->ecc == QRCODE_ECC_NOSPECIFY)
+    {
+        qr->ecc = QRCODE_ECC_M;
+    }
+    if (qr->mask == QRCODE_MASK_NOSPECIFY)
+    {
+        qr->mask = QRCODE_MASK_TYPE1;
+    }
+    uint8_t tempVersion = QRCode_getMinVersion(qr->mode,qr->ecc,len);
+    if (qr->version < tempVersion)
+    {
+        qr->version = tempVersion;
+    }
+    
+
+    // QRCode_printCapacities();
+
+    printf("QRCode @%X\nmode: %d\necc: %d\nmask: %d\nversion: %d\n",
+    qr,qr->mode,qr->ecc,qr->mask,qr->version);
+
     return QRCODE_OK;
 };
 
@@ -163,38 +348,7 @@ static void print_binary(uint8_t *data, uint32_t len)
     }
 };
 
-uint8_t QRCode_ALPHANUMERIC_toUInt8(uint8_t data)
-{
-    if ((data >= 'A') && (data <= 'Z'))
-        return data - 'A' + 10;
-    else if ((data >= '0') && (data <= '9'))
-        return data - '0';
-    else
-    {
-        switch (data)
-        {
-        case ' ':
-            return 36;
-        case '$':
-            return 37;
-        case '%':
-            return 38;
-        case '*':
-            return 39;
-        case '+':
-            return 40;
-        case '-':
-            return 41;
-        case '.':
-            return 42;
-        case '/':
-            return 43;
-        case ':':
-            return 44;
-        }
-    }
-    return 0;
-}
+
 
 static void QRCode_genDataBytes_NUMERIC(const uint8_t *raw, uint16_t rawLen,uint8_t *dataBytes,uint8_t dataLen)
 {
@@ -344,9 +498,19 @@ static void QRCode_genDataBytes_KANJI(const uint8_t *raw, uint16_t rawLen,uint8_
 
 static void QRCode_genDataBytes(QRCode *qr, const uint8_t *raw, uint16_t len,uint8_t *dataBytes)
 {
-    QRCode_genDataBytes_ALPHANUMERIC(raw,len,dataBytes,16);
-    // QRCode_genDataBytes_NUMERIC(raw,len,dataBytes,16);
-    // QRCode_genDataBytes_BYTE(raw,len,dataBytes,16);
+    switch (qr->mode)
+    {
+    case QRCODE_MODE_NUMERIC:
+        QRCode_genDataBytes_ALPHANUMERIC(raw,len,dataBytes,16);
+        break;
+    case QRCODE_MODE_ALPHANUMERIC:
+        QRCode_genDataBytes_NUMERIC(raw,len,dataBytes,16);
+        break;
+    default:
+    case QRCODE_MODE_BYTE:
+        QRCode_genDataBytes_BYTE(raw,len,dataBytes,16);
+        break;
+    }
 };
 static void QRCode_genEccCodePolyDiv(uint8_t* dataBytes,uint8_t* genBytes,uint8_t eccLen,uint8_t head)
 {

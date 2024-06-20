@@ -8,7 +8,7 @@ extern "C"
 #include <stdint.h>
 
 // #define QRCODE_NO_MALLOC
-// #define QRCODE_MAX_VERSION   40
+#define QRCODE_MAX_VERSION   40
 // #define QRCODE_STORAGE_FIRST
 // #define QRCODE_TIME_FIRST
 
