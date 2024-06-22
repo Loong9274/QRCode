@@ -375,8 +375,6 @@ static void QRCode_genDataBytes_NUMERIC(const uint8_t *raw, uint16_t rawLen,uint
         bitIndex+=5;
     }
     
-    print_binary(dataBytes,16);
-    
     bitIndex += (dataLen*8-bitIndex)>4?4:(dataLen*8-bitIndex);
     bitIndex = (bitIndex+7)/8*8;
     while ((bitIndex+16)<=(dataLen*8))
@@ -410,7 +408,6 @@ static void QRCode_genDataBytes_ALPHANUMERIC(const uint8_t *raw, uint16_t rawLen
         QRCode_appendBitset(dataBytes,bitIndex,temp,6);
         bitIndex+=5;
     }
-    print_binary(dataBytes,16);
     
     bitIndex += (dataLen*8-bitIndex)>4?4:(dataLen*8-bitIndex);
     bitIndex = (bitIndex+7)/8*8;
@@ -441,7 +438,6 @@ static void QRCode_genDataBytes_BYTE(const uint8_t *raw, uint16_t rawLen,uint8_t
         bitIndex+=8;
     }
 
-    print_binary(dataBytes,16);
     
     bitIndex += (dataLen*8-bitIndex)>4?4:(dataLen*8-bitIndex);
     bitIndex = (bitIndex+7)/8*8;
@@ -478,7 +474,6 @@ static void QRCode_genDataBytes_KANJI(const uint8_t *raw, uint16_t rawLen,uint8_
         QRCode_appendBitset(dataBytes,bitIndex,temp,6);
         bitIndex+=5;
     }
-    print_binary(dataBytes,16);
     
     bitIndex += (dataLen*8-bitIndex)>4?4:(dataLen*8-bitIndex);
     bitIndex = (bitIndex+7)/8*8;
@@ -496,19 +491,19 @@ static void QRCode_genDataBytes_KANJI(const uint8_t *raw, uint16_t rawLen,uint8_
 
 };
 
-static void QRCode_genDataBytes(QRCode *qr, const uint8_t *raw, uint16_t len,uint8_t *dataBytes)
+static void QRCode_genDataBytes(QRCode *qr, const uint8_t *raw, uint16_t len,uint8_t *dataBytes,uint16_t dataLen)
 {
     switch (qr->mode)
     {
     case QRCODE_MODE_NUMERIC:
-        QRCode_genDataBytes_ALPHANUMERIC(raw,len,dataBytes,16);
+        QRCode_genDataBytes_NUMERIC(raw,len,dataBytes,dataLen);
         break;
     case QRCODE_MODE_ALPHANUMERIC:
-        QRCode_genDataBytes_NUMERIC(raw,len,dataBytes,16);
+        QRCode_genDataBytes_ALPHANUMERIC(raw,len,dataBytes,dataLen);
         break;
     default:
     case QRCODE_MODE_BYTE:
-        QRCode_genDataBytes_BYTE(raw,len,dataBytes,16);
+        QRCode_genDataBytes_BYTE(raw,len,dataBytes,dataLen);
         break;
     }
 };
@@ -556,7 +551,7 @@ static void QRCode_genEccCode(uint8_t* dataBytes,uint8_t dataLen,uint8_t eccLen)
     {
         if (dataBytes[i] == 0)
             continue;
-        QRCode_genEccCodePolyDiv(dataBytes+i+1,genCode,10,dataBytes[i]);
+        QRCode_genEccCodePolyDiv(dataBytes+i+1,genCode,eccLen,dataBytes[i]);
     }
     // printf("eccBytes: ");
     // for (size_t i = 0; i < eccLen; i++)
@@ -569,29 +564,93 @@ static void QRCode_genEccCode(uint8_t* dataBytes,uint8_t dataLen,uint8_t eccLen)
 static QRCode_Error QRCode_encode(QRCode *qr, const uint8_t *raw, uint16_t len, uint8_t **dataSet)
 {
     printf("raw: %s\n",raw);
+    uint16_t byteLength = RawDataLength[qr->version-1]/8;
+    uint8_t blockNum = BlockNum[qr->ecc-1][qr->version-1];
+    uint8_t blockSize = byteLength/blockNum;
+    uint8_t bigBlockNum = byteLength - blockSize*blockNum;
+    uint8_t eccSize = EccByteNum[qr->ecc-1][qr->version-1];
 
-    uint8_t *dataBytes=calloc(26,1);
-    QRCode_genDataBytes(qr,raw,len,dataBytes);
-    printf("eccBytes: ");
-    for (size_t i = 0; i < 16; i++)
-    {
-        printf("%d ",dataBytes[i]);
-    }printf("\n");
-    *dataSet = malloc(26);
-    memcpy(*dataSet,dataBytes,16);
+    printf("byteLength: %d\nblockNum: %d\nblockSize: %d\nbigBlockNum: %d\neccSize: %d\n",
+        byteLength,blockNum,blockSize,bigBlockNum,eccSize);
 
-    QRCode_genEccCode(dataBytes,16,10);
-    printf("eccBytes: ");
-    for (size_t i = 0; i < 10; i++)
+    uint8_t dataSize = byteLength-blockNum*eccSize;
+    uint8_t *dataBytes=calloc(dataSize,1);
+    QRCode_genDataBytes(qr,raw,len,dataBytes,dataSize);
+    printf("dataBytes: ");
+    for (size_t i = 0; i < dataSize; i++)
     {
-        printf("%d ",dataBytes[16+i]);
+        if((i%16)==0)printf("\n");
+        printf("%3d, ",dataBytes[i]);
     }printf("\n");
-    memcpy((*dataSet)+16,dataBytes+16,10);
-    printf("eccBytes: ");
-    for (size_t i = 0; i < 26; i++)
+    // printf("eccBytes: ");
+    // for (size_t i = 0; i < 16; i++)
+    // {
+    //     printf("%d ",dataBytes[i]);
+    // }printf("\n");
+    dataSize -= bigBlockNum;
+    *dataSet = calloc((RawDataLength[qr->version-1]+7)/8,1);
+    
+    uint16_t index = 0;
+    for (size_t i = 0; i < dataSize; i++)
     {
-        printf("%d ",(*dataSet)[i]);
-    }printf("\n");
+        (*dataSet)[index] = dataBytes[i];
+        index += blockNum;
+        if (index>=dataSize)
+        {
+            index = index - dataSize + 1;
+        }
+    }
+    memcpy(*dataSet+dataSize,dataBytes+dataSize,bigBlockNum);
+
+    uint8_t *tempForEcc = calloc(blockSize+1,1);
+    for (size_t i = 0; i < blockNum-bigBlockNum; i++)
+    {
+        memcpy(tempForEcc,dataBytes+(blockSize-eccSize)*i,blockSize-eccSize);
+        QRCode_genEccCode(tempForEcc,blockSize-eccSize,eccSize);
+        index = dataSize+bigBlockNum+i;
+        for (size_t j = blockSize-eccSize; j < blockSize; j++)
+        {
+            (*dataSet)[index] = tempForEcc[j];
+            index+=blockNum;
+        }
+        printf("eccBytes: ");
+        for (size_t k = blockSize-eccSize; k < blockSize; k++)
+        {
+            printf("%d ",tempForEcc[k]);
+        }printf("\n");
+        memset(tempForEcc+blockSize-eccSize,0,eccSize);
+    }
+    for (size_t i = 0; i < bigBlockNum; i++)
+    {
+        memcpy(tempForEcc,dataBytes+(blockSize-eccSize)*(blockNum-bigBlockNum)+(blockSize-eccSize+1)*i,blockSize-eccSize+1);
+        QRCode_genEccCode(tempForEcc,blockSize-eccSize+1,eccSize);
+        index = dataSize+bigBlockNum+i+blockNum-bigBlockNum;
+        for (size_t j = blockSize-eccSize+1; j < blockSize+1; j++)
+        {
+            (*dataSet)[index] = tempForEcc[j];
+            index+=blockNum;
+        }
+        printf("eccBytes: ");
+        for (size_t k = blockSize-eccSize+1; k < blockSize+1; k++)
+        {
+            printf("%d ",tempForEcc[k]);
+        }printf("\n");
+        memset(tempForEcc+blockSize-eccSize+1,0,eccSize);
+    }
+    
+    // memcpy(*dataSet,dataBytes,16);
+    // memcpy((*dataSet)+16,tempForEcc+16,10);
+    // QRCode_genEccCode(dataBytes,16,10);
+    // 32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17
+    
+    // 196  35  39  119  235  215  231  226  93  23
+    
+    // memcpy((*dataSet)+16,dataBytes+16,10);
+    // printf("eccBytes: ");
+    // for (size_t i = 0; i < 26; i++)
+    // {
+    //     printf("%d ",(*dataSet)[i]);
+    // }printf("\n");
     return QRCODE_OK;
 };
 /////////////////// place modules //////////////////
@@ -719,11 +778,7 @@ static void QRCode_placeDataModules(QRCode *qr, uint8_t *data)
     int16_t x = width - 1;
     int16_t y = width - 1;
     uint32_t count = 0;
-    printf("eccBytes: ");
-    for (size_t i = 0; i < 26; i++)
-    {
-        printf("%d ",data[i]);
-    }printf("\n");
+
     while (x > 1)
     {
         while (y >= 0)
